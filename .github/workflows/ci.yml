@@ -1,0 +1,41 @@
+name: MedScribe CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run db:generate
+
+      - name: Typecheck
+        run: npm run type-check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run Unit Tests
+        run: npm run test
+
+      - name: Build Next.js Application
+        run: npm run build
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/medscribe_test"
+          NEXTAUTH_SECRET: "ci-secret-key-12345"
+          NEXTAUTH_URL: "http://localhost:3000"
