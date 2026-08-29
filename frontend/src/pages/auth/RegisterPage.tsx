@@ -1,17 +1,25 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import client from '@/api/client';
-import { Activity, User, Mail, Lock, Stethoscope, AlertCircle } from 'lucide-react';
+import {
+  Activity,
+  User,
+  Mail,
+  Lock,
+  Stethoscope,
+  AlertCircle,
+} from 'lucide-react';
 
 export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
     specialty: 'Cardiology',
-    phone: '',
   });
+
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -22,12 +30,27 @@ export const RegisterPage: React.FC = () => {
 
     try {
       const res = await client.post('/auth/register', formData);
+
       const { access_token, user } = res.data;
+
       localStorage.setItem('token', access_token);
       localStorage.setItem('user', JSON.stringify(user));
+
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Registration failed');
+      const detail = err.response?.data?.detail;
+
+      if (Array.isArray(detail)) {
+        setError(
+          detail
+            .map((item: any) => item.msg || 'Invalid input')
+            .join(', ')
+        );
+      } else if (typeof detail === 'string') {
+        setError(detail);
+      } else {
+        setError('Registration failed');
+      }
     } finally {
       setLoading(false);
     }
@@ -40,8 +63,14 @@ export const RegisterPage: React.FC = () => {
           <div className="p-3 bg-blue-600 rounded-xl mb-3 shadow-md">
             <Activity className="w-8 h-8 text-white" />
           </div>
-          <h2 className="text-2xl font-bold text-slate-900">Doctor Registration</h2>
-          <p className="text-slate-500 text-sm mt-1">Create your clinical provider account</p>
+
+          <h2 className="text-2xl font-bold text-slate-900">
+            Doctor Registration
+          </h2>
+
+          <p className="text-slate-500 text-sm mt-1">
+            Create your clinical provider account
+          </p>
         </div>
 
         {error && (
@@ -52,66 +81,113 @@ export const RegisterPage: React.FC = () => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Full Name */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Full Name</label>
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Full Name
+            </label>
+
             <div className="relative">
               <User className="w-5 h-5 absolute left-3 top-3 text-slate-400" />
+
               <input
                 type="text"
                 required
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    name: e.target.value,
+                  })
+                }
                 placeholder="Dr. John Smith"
                 className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm"
               />
             </div>
           </div>
 
+          {/* Email */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Email Address</label>
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Email Address
+            </label>
+
             <div className="relative">
               <Mail className="w-5 h-5 absolute left-3 top-3 text-slate-400" />
+
               <input
                 type="email"
                 required
                 value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    email: e.target.value,
+                  })
+                }
                 placeholder="dr.smith@hospital.com"
                 className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm"
               />
             </div>
           </div>
 
+          {/* Specialty */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Specialty</label>
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Specialty
+            </label>
+
             <div className="relative">
               <Stethoscope className="w-5 h-5 absolute left-3 top-3 text-slate-400" />
+
               <input
                 type="text"
                 required
                 value={formData.specialty}
-                onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    specialty: e.target.value,
+                  })
+                }
                 placeholder="Cardiology, Internal Medicine, etc."
                 className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm"
               />
             </div>
           </div>
 
+          {/* Password */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Password</label>
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Password
+            </label>
+
             <div className="relative">
               <Lock className="w-5 h-5 absolute left-3 top-3 text-slate-400" />
+
               <input
                 type="password"
                 required
+                minLength={12}
+                maxLength={128}
                 value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                placeholder="••••••••"
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    password: e.target.value,
+                  })
+                }
+                placeholder="At least 12 characters"
                 className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm"
               />
             </div>
+
+            <p className="text-xs text-slate-500 mt-1">
+              Password must be at least 12 characters.
+            </p>
           </div>
 
+          {/* Submit */}
           <button
             type="submit"
             disabled={loading}
@@ -123,7 +199,10 @@ export const RegisterPage: React.FC = () => {
 
         <div className="mt-6 pt-4 border-t border-slate-200 text-center text-xs text-slate-500">
           Already registered?{' '}
-          <Link to="/login" className="font-semibold text-blue-600 hover:underline">
+          <Link
+            to="/login"
+            className="font-semibold text-blue-600 hover:underline"
+          >
             Sign in
           </Link>
         </div>
