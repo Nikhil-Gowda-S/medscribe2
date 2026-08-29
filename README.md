@@ -29,4 +29,13 @@ Open http://localhost:5173. API documentation is at http://localhost:8000/docs.
 
 Set a non-default `JWT_SECRET`, a PostgreSQL `DATABASE_URL`, and `GROQ_API_KEY`. Do not commit `.env` files. Production must set `ENVIRONMENT=production` and explicit `CORS_ORIGINS`.
 
-Deploy FastAPI and PostgreSQL together, then deploy the Vite frontend with `/api` proxied to FastAPI. Run `alembic upgrade head` during releases. The retired Next.js/Prisma instructions do not apply to this version.
+### Vercel and Neon
+
+Deploy two Vercel projects from the same repository:
+
+- API project root: `backend`. Vercel recognizes the FastAPI instance at `app/main.py`.
+- Frontend project root: `frontend`. Set `VITE_API_BASE_URL` to `https://YOUR-API.vercel.app/api/v1` during the frontend build.
+
+Create a Neon database and set the API project's `DATABASE_URL` to its **pooled** connection string, plus `JWT_SECRET`, `GROQ_API_KEY`, `ENVIRONMENT=production`, and `CORS_ORIGINS` containing your exact frontend URL. Run `alembic upgrade head` against Neon before the first deployment and whenever database migrations are added.
+
+Vercel Functions accept request bodies up to 4.5 MB, so audio uploads are limited to 4 MB in this deployment. Support for larger recordings requires direct object-storage uploads.

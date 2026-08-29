@@ -9,8 +9,9 @@ if database_url.startswith("postgresql://"):
 engine = create_engine(
     database_url,
     pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
+    pool_size=2,
+    max_overflow=0,
+    pool_recycle=300,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

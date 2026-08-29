@@ -90,8 +90,8 @@ async def upload_consultation_audio(
     if extension not in allowed_extensions or not (file.content_type or "").startswith("audio/"):
         raise HTTPException(status_code=400, detail="Upload a supported audio file")
     contents = await file.read()
-    if not contents or len(contents) > 25 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Audio file must be between 1 byte and 25 MB")
+    if not contents or len(contents) > 4 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Audio file must be between 1 byte and 4 MB")
     transcript_text = transcribe_audio_file(contents, file.filename)
     
     consultation.transcript = transcript_text
