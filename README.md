@@ -1,7 +1,7 @@
 # MedScribe
 
 MedScribe is an AI-assisted clinical documentation application. The active stack is a React/Vite frontend, a FastAPI backend, and PostgreSQL.
-
+ 
 ## Local development
 
 1. Create a PostgreSQL database named `medscribe` and copy `backend/.env.example` to `backend/.env`.
