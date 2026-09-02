@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '@/api/client';
 import { Patient, DocumentTemplate } from '@/types';
-import { Mic, Square, Upload, Sparkles, FileText } from 'lucide-react';
+import { Mic, Square, Upload, Sparkles, Loader2 } from 'lucide-react';
 
 export const DoctorNewConsultationPage: React.FC = () => {
   const navigate = useNavigate();
@@ -17,9 +17,16 @@ export const DoctorNewConsultationPage: React.FC = () => {
   // the generated document is attached to the same encounter rather than a new one.
   const [consultationId, setConsultationId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [activeOperation, setActiveOperation] = useState<'transcribing' | 'generating' | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<number | null>(null);
+  const recordingSecondsRef = useRef(0);
+
+  useEffect(() => () => {
+    if (recordingTimerRef.current !== null) window.clearInterval(recordingTimerRef.current);
+  }, []);
 
   useEffect(() => {
     client.get('/patients').then(res => setPatients(res.data));
@@ -46,6 +53,17 @@ export const DoctorNewConsultationPage: React.FC = () => {
 
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        mediaRecorder.stream.getTracks().forEach(track => track.stop());
+        if (recordingTimerRef.current !== null) {
+          window.clearInterval(recordingTimerRef.current);
+          recordingTimerRef.current = null;
+        }
+        setIsRecording(false);
+
+        if (audioBlob.size < 2_000 || recordingSecondsRef.current < 1) {
+          alert('Recording was too short. Please record for at least a few seconds before stopping.');
+          return;
+        }
         const formData = new FormData();
         formData.append('file', audioBlob, 'recording.webm');
         
@@ -63,11 +81,18 @@ export const DoctorNewConsultationPage: React.FC = () => {
           alert(err.response?.data?.detail || 'Error uploading recorded audio');
         } finally {
           setActiveOperation(null);
-          setIsRecording(false);
         }
       };
 
-      mediaRecorder.start();
+      // Request periodic chunks so the browser preserves the full recording,
+      // including speech immediately before the Stop button is pressed.
+      mediaRecorder.start(1000);
+      setRecordingSeconds(0);
+      recordingSecondsRef.current = 0;
+      recordingTimerRef.current = window.setInterval(() => {
+        recordingSecondsRef.current += 1;
+        setRecordingSeconds(recordingSecondsRef.current);
+      }, 1000);
       setIsRecording(true);
     } catch (err) {
       alert('Microphone access denied or not available');
@@ -77,8 +102,11 @@ export const DoctorNewConsultationPage: React.FC = () => {
   const handleStopRecord = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
     } else {
+      if (recordingTimerRef.current !== null) {
+        window.clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
       setIsRecording(false);
     }
   };
@@ -239,8 +267,8 @@ export const DoctorNewConsultationPage: React.FC = () => {
               <input type="file" accept="audio/*" disabled={Boolean(activeOperation) || isRecording} onChange={handleFileUpload} className="hidden" />
             </label>
           </div>
-          {isRecording && <p className="text-xs text-rose-400 animate-pulse font-mono">● Recording in progress...</p>}
-          {activeOperation === 'transcribing' && <p className="text-xs text-blue-300 animate-pulse">Transcribing audio. Please keep this page open…</p>}
+          {isRecording && <p className="text-xs text-rose-400 animate-pulse font-mono">● Recording {recordingSeconds}s — speak normally, then press Stop when finished.</p>}
+          {activeOperation === 'transcribing' && <p className="text-xs text-blue-300 flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" />Transcribing audio. This can take up to a minute; please keep this page open.</p>}
         </div>
 
         {/* Transcript Textarea */}
@@ -261,7 +289,7 @@ export const DoctorNewConsultationPage: React.FC = () => {
           disabled={Boolean(activeOperation) || !selectedPatientId || !transcript}
           className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3.5 px-6 rounded-xl shadow-lg transition flex items-center justify-center space-x-2 disabled:opacity-50"
         >
-          <Sparkles className="w-5 h-5" />
+          {activeOperation ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
           <span>{activeOperation === 'transcribing' ? 'Transcribing Audio...' : activeOperation === 'generating' ? 'Generating AI Clinical Note...' : 'Generate AI Clinical Draft'}</span>
         </button>
       </div>

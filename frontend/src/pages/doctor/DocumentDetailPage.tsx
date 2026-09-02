@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import client from '@/api/client';
 import { Document, Prescription } from '@/types';
-import { Save, CheckCircle, FileDown, Plus, Lock, AlertTriangle, Pill, X } from 'lucide-react';
+import { Save, CheckCircle, FileDown, Lock, AlertTriangle, Pill, X, Loader2 } from 'lucide-react';
 
 export const DoctorDocumentDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -12,7 +12,7 @@ export const DoctorDocumentDetailPage: React.FC = () => {
   const [content, setContent] = useState('');
   const [addendumContent, setAddendumContent] = useState('');
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [activeAction, setActiveAction] = useState<'save' | 'finalize' | 'pdf' | 'addendum' | 'prescription' | null>(null);
   const [notFound, setNotFound] = useState(false);
 
   const [showRxModal, setShowRxModal] = useState(false);
@@ -46,46 +46,53 @@ export const DoctorDocumentDetailPage: React.FC = () => {
   };
 
   const handleSaveDraft = async () => {
+    if (activeAction) return;
     try {
-      setSaving(true);
+      setActiveAction('save');
       await client.put(`/documents/${document?.id}`, { content });
       alert('Draft saved successfully!');
       fetchDoc();
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Error saving draft');
     } finally {
-      setSaving(false);
+      setActiveAction(null);
     }
   };
 
   const handleFinalize = async () => {
     if (!window.confirm('Are you sure you want to finalize this document? Once finalized, it becomes legally immutable.')) return;
+    if (activeAction) return;
     try {
-      setSaving(true);
+      setActiveAction('finalize');
       await client.post(`/documents/${document?.id}/finalize`);
       alert('Document finalized and signed!');
       fetchDoc();
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Error finalizing document');
     } finally {
-      setSaving(false);
+      setActiveAction(null);
     }
   };
 
   const handleAddendum = async () => {
-    if (!addendumContent.trim()) return;
+    if (!addendumContent.trim() || activeAction) return;
     try {
+      setActiveAction('addendum');
       await client.post(`/documents/${document?.id}/addendum`, { content: addendumContent });
       alert('Addendum created!');
       setAddendumContent('');
       fetchDoc();
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Error creating addendum');
+    } finally {
+      setActiveAction(null);
     }
   };
 
   const handleExportPDF = async () => {
+    if (activeAction) return;
     try {
+      setActiveAction('pdf');
       const res = await client.get(`/documents/${document?.id}/pdf`, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = window.document.createElement('a');
@@ -108,14 +115,17 @@ export const DoctorDocumentDetailPage: React.FC = () => {
       } else {
         alert(`Error downloading PDF: ${err.message || err}`);
       }
+    } finally {
+      setActiveAction(null);
     }
   };
 
 
   const handleCreatePrescription = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!document) return;
+    if (!document || activeAction) return;
     try {
+      setActiveAction('prescription');
       await client.post('/prescriptions', {
         ...rxForm,
         patient_id: document.patient_id,
@@ -126,6 +136,8 @@ export const DoctorDocumentDetailPage: React.FC = () => {
       setRxForm({ medication: '', dosage: '', route: 'oral', frequency: 'twice daily', duration: '7 days', instructions: '' });
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Failed to create prescription');
+    } finally {
+      setActiveAction(null);
     }
   };
 
@@ -172,19 +184,19 @@ export const DoctorDocumentDetailPage: React.FC = () => {
             <>
               <button
                 onClick={handleSaveDraft}
-                disabled={saving}
-                className="inline-flex items-center space-x-2 bg-slate-800 hover:bg-slate-900 text-white font-medium px-4 py-2 rounded-xl text-sm transition"
+                disabled={Boolean(activeAction)}
+                className="inline-flex items-center space-x-2 bg-slate-800 hover:bg-slate-900 text-white font-medium px-4 py-2 rounded-xl text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Save className="w-4 h-4" />
-                <span>Save Draft</span>
+                {activeAction === 'save' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                <span>{activeAction === 'save' ? 'Saving Draft...' : 'Save Draft'}</span>
               </button>
               <button
                 onClick={handleFinalize}
-                disabled={saving}
-                className="inline-flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2 rounded-xl text-sm transition"
+                disabled={Boolean(activeAction)}
+                className="inline-flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2 rounded-xl text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <CheckCircle className="w-4 h-4" />
-                <span>Finalize Note</span>
+                {activeAction === 'finalize' ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                <span>{activeAction === 'finalize' ? 'Finalizing...' : 'Finalize Note'}</span>
               </button>
             </>
           ) : (
@@ -195,19 +207,21 @@ export const DoctorDocumentDetailPage: React.FC = () => {
           )}
 
           <button
+            disabled={Boolean(activeAction)}
             onClick={() => setShowRxModal(true)}
-            className="inline-flex items-center space-x-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-3.5 py-2 rounded-xl text-sm transition"
+            className="inline-flex items-center space-x-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-3.5 py-2 rounded-xl text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Pill className="w-4 h-4" />
             <span>Add Rx</span>
           </button>
 
           <button
+            disabled={Boolean(activeAction)}
             onClick={handleExportPDF}
-            className="inline-flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white font-medium px-3.5 py-2 rounded-xl text-sm transition"
+            className="inline-flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-700 text-white font-medium px-3.5 py-2 rounded-xl text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <FileDown className="w-4 h-4" />
-            <span>Export PDF</span>
+            {activeAction === 'pdf' ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+            <span>{activeAction === 'pdf' ? 'Preparing PDF...' : 'Export PDF'}</span>
           </button>
 
         </div>
@@ -242,10 +256,11 @@ export const DoctorDocumentDetailPage: React.FC = () => {
             className="w-full p-3 bg-white border border-amber-300 rounded-xl text-sm"
           />
           <button
+            disabled={Boolean(activeAction) || !addendumContent.trim()}
             onClick={handleAddendum}
-            className="bg-amber-700 hover:bg-amber-800 text-white font-medium px-4 py-2 rounded-xl text-sm"
+            className="bg-amber-700 hover:bg-amber-800 text-white font-medium px-4 py-2 rounded-xl text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Submit Addendum
+            {activeAction === 'addendum' ? 'Saving Addendum...' : 'Submit Addendum'}
           </button>
         </div>
       )}
@@ -299,7 +314,7 @@ export const DoctorDocumentDetailPage: React.FC = () => {
                   <input required value={rxForm.duration} onChange={e => setRxForm({...rxForm, duration: e.target.value})} placeholder="7 days" className="w-full p-2 border rounded-lg text-sm" />
                 </div>
               </div>
-              <button type="submit" className="w-full bg-indigo-600 text-white font-semibold py-2.5 rounded-xl shadow mt-2 text-sm">Issue Prescription</button>
+              <button type="submit" disabled={Boolean(activeAction)} className="w-full bg-indigo-600 text-white font-semibold py-2.5 rounded-xl shadow mt-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed">{activeAction === 'prescription' ? 'Issuing Prescription...' : 'Issue Prescription'}</button>
             </form>
           </div>
         </div>
