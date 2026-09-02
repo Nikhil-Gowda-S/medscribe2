@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import client from '@/api/client';
 import { Patient, Consultation, Document, Prescription } from '@/types';
-import { HeartPulse, Calendar, FileText, Pill, ShieldCheck, Download } from 'lucide-react';
+import { Calendar, FileText, Pill, ShieldCheck, Download, Loader2 } from 'lucide-react';
 
 export const PatientDashboardPage: React.FC = () => {
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [loading, setLoading] = useState(true);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -30,6 +31,29 @@ export const PatientDashboardPage: React.FC = () => {
     };
     fetchData();
   }, []);
+
+  const handleDownload = async (docId: string, docType: string) => {
+    if (downloadingId) return;
+    try {
+      setDownloadingId(docId);
+      // Use the authenticated API client rather than a direct browser link.
+      // A direct link cannot send the bearer token and Vercel serves the SPA
+      // fallback, which looks like a redirect back to login.
+      const res = await client.get(`/documents/${docId}/pdf`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = window.document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${docType}_${docId}.pdf`);
+      window.document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Unable to download this report. Please try again.');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   if (loading) return <div className="p-8 text-center text-slate-500">Loading patient portal...</div>;
 
@@ -116,15 +140,15 @@ export const PatientDashboardPage: React.FC = () => {
                   <h4 className="font-bold text-slate-900">{doc.type}</h4>
                   <p className="text-xs text-slate-500">Date: {new Date(doc.created_at).toLocaleDateString()}</p>
                 </div>
-                <a
-                  href={`/api/v1/documents/${doc.id}/pdf`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center space-x-1 text-xs font-semibold bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-2 rounded-lg transition"
+                <button
+                  type="button"
+                  disabled={Boolean(downloadingId)}
+                  onClick={() => handleDownload(doc.id, doc.type)}
+                  className="inline-flex items-center space-x-1 text-xs font-semibold bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Download className="w-4 h-4" />
-                  <span>Download Signed PDF</span>
-                </a>
+                  {downloadingId === doc.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  <span>{downloadingId === doc.id ? 'Preparing PDF...' : 'Download Signed PDF'}</span>
+                </button>
               </div>
             ))}
           </div>
