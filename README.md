@@ -38,4 +38,6 @@ Deploy two Vercel projects from the same repository:
 
 Create a Neon database and set the API project's `DATABASE_URL` to its **pooled** connection string, plus `JWT_SECRET`, `GROQ_API_KEY`, `ENVIRONMENT=production`, and `CORS_ORIGINS` containing your exact frontend URL. Run `alembic upgrade head` against Neon before the first deployment and whenever database migrations are added.
 
+To bootstrap the first production administrator, set `INITIAL_ADMIN_EMAIL` and a unique 12+-character `INITIAL_ADMIN_PASSWORD` in the **API project's Production** environment variables, then redeploy the API. The account is created only when that email is not already in use. Remove both bootstrap variables after the administrator has signed in successfully.
+
 Vercel Functions accept request bodies up to 4.5 MB, so audio uploads are limited to 4 MB in this deployment. Support for larger recordings requires direct object-storage uploads.

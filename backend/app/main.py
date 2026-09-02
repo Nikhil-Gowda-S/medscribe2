@@ -2,6 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.v1.router import api_router
+from app.db.session import SessionLocal
+from app.models.user import User
+from app.core.security import get_password_hash
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -22,6 +25,30 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+@app.on_event("startup")
+def create_initial_admin() -> None:
+    """Create an administrator once from deployment-only bootstrap settings."""
+    email = settings.INITIAL_ADMIN_EMAIL.strip().lower()
+    password = settings.INITIAL_ADMIN_PASSWORD
+    if not email or not password:
+        return
+    if len(password) < 12:
+        raise RuntimeError("INITIAL_ADMIN_PASSWORD must be at least 12 characters")
+
+    db = SessionLocal()
+    try:
+        if db.query(User).filter(User.email == email).first():
+            return
+        db.add(User(
+            name="System Administrator",
+            email=email,
+            password_hash=get_password_hash(password),
+            role="ADMIN",
+        ))
+        db.commit()
+    finally:
+        db.close()
 
 @app.get("/")
 def root():

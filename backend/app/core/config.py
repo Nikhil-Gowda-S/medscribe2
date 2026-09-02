@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     CORS_ORIGINS: Union[List[str], str] = ["http://localhost:5173", "http://localhost:3000"]
     HOSPITAL_NAME: str = "Medical Center"
+    # Empty by default. When both are set in the deployment environment, the
+    # application creates this administrator once if that email is unused.
+    INITIAL_ADMIN_EMAIL: str = ""
+    INITIAL_ADMIN_PASSWORD: str = ""
 
     class Config:
         env_file = ".env"
