@@ -76,33 +76,40 @@ def seed_db():
 
         # 5. Create Default Templates
         tmpl = db.query(DocumentTemplate).filter(DocumentTemplate.name == "Standard SOAP Note").first()
+        template_body = """SUBJECTIVE:
+Chief Complaint: {{chiefComplaint}}
+History of Present Illness: {{historyOfPresentIllness}}
+
+OBJECTIVE:
+Physical Examination: {{examination}}
+
+ASSESSMENT:
+Diagnosis: {{diagnosis}}
+
+PLAN:
+{{plan}}
+"""
+        template_variables = '["{{patientName}}", "{{consultationDate}}", "{{doctorName}}", "{{chiefComplaint}}", "{{historyOfPresentIllness}}", "{{examination}}", "{{diagnosis}}", "{{plan}}"]'
         if not tmpl:
             tmpl = DocumentTemplate(
                 name="Standard SOAP Note",
                 description="Comprehensive Subjective, Objective, Assessment, Plan template",
                 type="SOAP Note",
                 specialty="General Medicine",
-                body="""SUBJECTIVE:
-Chief Complaint: {{chiefComplaint}}
-History of Present Illness: Patient presents with symptoms discussed during encounter.
-
-OBJECTIVE:
-Vital Signs: BP 120/80, HR 72, Temp 98.6F.
-Physical Examination: Systemic examination unremarkable.
-
-ASSESSMENT:
-Diagnosis: {{diagnosis}}
-
-PLAN:
-1. Continue current medications.
-2. Follow-up in 2 weeks.
-""",
-                variables='["{{patientName}}", "{{dateOfBirth}}", "{{consultationDate}}", "{{doctorName}}"]',
+                body=template_body,
+                variables=template_variables,
                 status="active"
             )
             db.add(tmpl)
             db.commit()
             print("Created Standard SOAP Note template")
+        else:
+            # Keep the bundled template evidence-grounded when this seed command
+            # is run against an existing development or demo database.
+            tmpl.body = template_body
+            tmpl.variables = template_variables
+            db.commit()
+            print("Updated Standard SOAP Note template")
 
         print("\nSeeding complete!")
         print("Doctor Login:  doctor@medscribe.com / password123")

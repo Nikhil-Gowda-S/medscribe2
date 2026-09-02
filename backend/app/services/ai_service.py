@@ -92,6 +92,14 @@ Extract the clinical facts and return a structured JSON object strictly matching
                 "patientName": patient_name,
                 "doctorName": doctor_name,
                 "consultationDate": consultation_date,
+                # Friendly aliases supported by the template editor and seed.
+                "diagnosis": "\\n- ".join(facts.assessment) if facts.assessment else "Not documented",
+                "assessment": "\\n- ".join(facts.assessment) if facts.assessment else "Not documented",
+                "plan": "\\n- ".join(facts.plan) if facts.plan else "Not documented",
+                "medications": "\\n- ".join(facts.medications) if facts.medications else "Not documented",
+                "allergies": "\\n- ".join(facts.allergies) if facts.allergies else "Not documented",
+                "examination": "\\n- ".join(facts.examination) if facts.examination else "Not documented",
+                "investigations": "\\n- ".join(facts.investigations) if facts.investigations else "Not documented",
             })
             for key, val in values.items():
                 val_str = "\\n- ".join(val) if isinstance(val, list) and val else (str(val) if not isinstance(val, list) else "Not documented")

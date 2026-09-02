@@ -1,5 +1,8 @@
 from typing import List, Optional
 from datetime import datetime
+from uuid import uuid4
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -18,6 +21,17 @@ def list_patients(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # Email is optional, but when supplied it is a useful safe guard against a
+    # double-click creating the same patient twice for this doctor.
+    if patient_in.email:
+        duplicate = db.query(Patient).join(DoctorPatient).filter(
+            DoctorPatient.doctor_id == current_user.id,
+            Patient.deleted_at.is_(None),
+            func.lower(Patient.email) == patient_in.email.lower(),
+        ).first()
+        if duplicate:
+            raise HTTPException(status_code=409, detail="A patient with this email is already assigned to you")
+
     if current_user.role == "ADMIN":
         return db.query(Patient).filter(Patient.deleted_at.is_(None)).all()
     elif current_user.role == "DOCTOR":
@@ -45,10 +59,14 @@ def create_patient(
         phone=patient_in.phone,
         email=patient_in.email,
         address=patient_in.address,
-        medical_record_number=patient_in.medical_record_number or f"MRN-{int(datetime.utcnow().timestamp())}",
+        medical_record_number=patient_in.medical_record_number or f"MRN-{uuid4().hex[:10].upper()}",
     )
     db.add(patient)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="This medical record number is already in use")
     db.refresh(patient)
 
     # Link doctor to patient

@@ -6,6 +6,8 @@ import { Plus, Search, UserCheck, X } from 'lucide-react';
 export const DoctorPatientsPage: React.FC = () => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isActivating, setIsActivating] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showActivateModal, setShowActivateModal] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState('');
@@ -42,7 +44,9 @@ export const DoctorPatientsPage: React.FC = () => {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSaving) return;
     try {
+      setIsSaving(true);
       const payload: any = { ...form };
       payload.date_of_birth = payload.date_of_birth ? new Date(payload.date_of_birth).toISOString() : null;
       payload.email = payload.email || null;
@@ -52,15 +56,19 @@ export const DoctorPatientsPage: React.FC = () => {
       await client.post('/patients', payload);
       setShowModal(false);
       setForm({ first_name: '', last_name: '', date_of_birth: '', gender: 'Male', phone: '', email: '', medical_record_number: '' });
-      fetchPatients();
-    } catch (err) {
-      alert('Error creating patient');
+      await fetchPatients();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Error creating patient');
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleActivate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isActivating) return;
     try {
+      setIsActivating(true);
       await client.post('/patients/activate-account', {
         patient_id: selectedPatientId,
         email: actForm.email,
@@ -71,6 +79,8 @@ export const DoctorPatientsPage: React.FC = () => {
       setActForm({ email: '', password: '' });
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Failed to activate account');
+    } finally {
+      setIsActivating(false);
     }
   };
 
@@ -142,7 +152,7 @@ export const DoctorPatientsPage: React.FC = () => {
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="font-bold text-lg text-slate-900">Add Patient Record</h3>
-              <button onClick={() => setShowModal(false)}><X className="w-5 h-5 text-slate-400" /></button>
+              <button type="button" disabled={isSaving} onClick={() => setShowModal(false)}><X className="w-5 h-5 text-slate-400" /></button>
             </div>
             <form onSubmit={handleCreate} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -183,7 +193,7 @@ export const DoctorPatientsPage: React.FC = () => {
                   <input type="date" value={form.date_of_birth} onChange={e => setForm({...form, date_of_birth: e.target.value})} className="w-full p-2 border rounded-lg text-sm" />
                 </div>
               </div>
-              <button type="submit" className="w-full bg-blue-600 text-white font-semibold py-2.5 rounded-xl shadow mt-2 text-sm">Save Patient</button>
+              <button type="submit" disabled={isSaving} className="w-full bg-blue-600 text-white font-semibold py-2.5 rounded-xl shadow mt-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed">{isSaving ? 'Saving Patient...' : 'Save Patient'}</button>
             </form>
           </div>
         </div>
@@ -195,7 +205,7 @@ export const DoctorPatientsPage: React.FC = () => {
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="font-bold text-lg text-slate-900">Provision Patient Login</h3>
-              <button onClick={() => setShowActivateModal(false)}><X className="w-5 h-5 text-slate-400" /></button>
+              <button type="button" disabled={isActivating} onClick={() => setShowActivateModal(false)}><X className="w-5 h-5 text-slate-400" /></button>
             </div>
             <form onSubmit={handleActivate} className="space-y-3">
               <div>
@@ -206,7 +216,7 @@ export const DoctorPatientsPage: React.FC = () => {
                 <label className="text-xs font-semibold text-slate-600">Initial Password</label>
                 <input type="password" required value={actForm.password} onChange={e => setActForm({...actForm, password: e.target.value})} placeholder="••••••••" className="w-full p-2 border rounded-lg text-sm" />
               </div>
-              <button type="submit" className="w-full bg-emerald-600 text-white font-semibold py-2.5 rounded-xl shadow mt-2 text-sm">Create Patient Portal Account</button>
+              <button type="submit" disabled={isActivating} className="w-full bg-emerald-600 text-white font-semibold py-2.5 rounded-xl shadow mt-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed">{isActivating ? 'Creating Account...' : 'Create Patient Portal Account'}</button>
             </form>
           </div>
         </div>

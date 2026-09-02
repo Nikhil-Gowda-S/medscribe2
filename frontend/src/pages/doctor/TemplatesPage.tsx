@@ -7,6 +7,8 @@ export const DoctorTemplatesPage: React.FC = () => {
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
   const [form, setForm] = useState({
     name: '',
@@ -33,7 +35,9 @@ export const DoctorTemplatesPage: React.FC = () => {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSaving) return;
     try {
+      setIsSaving(true);
       await client.post('/templates', {
         ...form,
         variables: ["{{patientName}}", "{{consultationDate}}", "{{doctorName}}", "{{chiefComplaint}}", "{{historyOfPresentIllness}}"],
@@ -41,8 +45,10 @@ export const DoctorTemplatesPage: React.FC = () => {
       setShowModal(false);
       setForm({ name: '', description: '', type: 'SOAP Note', specialty: 'General Medicine', body: '' });
       fetchTemplates();
-    } catch (err) {
-      alert('Error creating template');
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Error creating template');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -57,19 +63,24 @@ export const DoctorTemplatesPage: React.FC = () => {
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isImporting) return;
     if (!e.target.files || e.target.files.length === 0) return;
     const file = e.target.files[0];
     const formData = new FormData();
     formData.append('file', file);
 
     try {
+      setIsImporting(true);
       await client.post('/templates/import', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       alert('Template imported successfully!');
       fetchTemplates();
-    } catch (err) {
-      alert('Error importing template file');
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Error importing template file');
+    } finally {
+      setIsImporting(false);
+      e.target.value = '';
     }
   };
 
@@ -82,10 +93,10 @@ export const DoctorTemplatesPage: React.FC = () => {
         </div>
 
         <div className="flex items-center space-x-3">
-          <label className="inline-flex items-center space-x-2 bg-slate-800 hover:bg-slate-900 text-white font-medium px-4 py-2.5 rounded-xl text-sm transition cursor-pointer shadow-sm">
+          <label className={`inline-flex items-center space-x-2 bg-slate-800 hover:bg-slate-900 text-white font-medium px-4 py-2.5 rounded-xl text-sm transition shadow-sm ${isImporting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
             <Upload className="w-4 h-4 text-blue-400" />
-            <span>Import Template</span>
-            <input type="file" accept=".txt,.docx,.html" onChange={handleFileUpload} className="hidden" />
+            <span>{isImporting ? 'Importing...' : 'Import Template'}</span>
+            <input type="file" accept=".txt,.docx,.html" disabled={isImporting} onChange={handleFileUpload} className="hidden" />
           </label>
 
           <button
@@ -107,7 +118,10 @@ export const DoctorTemplatesPage: React.FC = () => {
           <code className="bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">&#123;&#123;consultationDate&#125;&#125;</code>,{' '}
           <code className="bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">&#123;&#123;doctorName&#125;&#125;</code>,{' '}
           <code className="bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">&#123;&#123;chiefComplaint&#125;&#125;</code>,{' '}
-          <code className="bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">&#123;&#123;historyOfPresentIllness&#125;&#125;</code>
+          <code className="bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">&#123;&#123;historyOfPresentIllness&#125;&#125;</code>,{' '}
+          <code className="bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">&#123;&#123;examination&#125;&#125;</code>,{' '}
+          <code className="bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">&#123;&#123;diagnosis&#125;&#125;</code>,{' '}
+          <code className="bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">&#123;&#123;plan&#125;&#125;</code>
         </div>
       </div>
 
@@ -138,7 +152,7 @@ export const DoctorTemplatesPage: React.FC = () => {
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="font-bold text-lg text-slate-900">Create Custom Template</h3>
-              <button onClick={() => setShowModal(false)}><X className="w-5 h-5 text-slate-400" /></button>
+              <button type="button" disabled={isSaving} onClick={() => setShowModal(false)}><X className="w-5 h-5 text-slate-400" /></button>
             </div>
             <form onSubmit={handleCreate} className="space-y-3">
               <div>
@@ -164,7 +178,7 @@ export const DoctorTemplatesPage: React.FC = () => {
                 <label className="text-xs font-semibold text-slate-600">Template Structure Body</label>
                 <textarea required rows={6} value={form.body} onChange={e => setForm({...form, body: e.target.value})} placeholder="SUBJECTIVE:\nChief Complaint: {{chiefComplaint}}..." className="w-full p-2 border rounded-lg text-sm font-mono" />
               </div>
-              <button type="submit" className="w-full bg-blue-600 text-white font-semibold py-2.5 rounded-xl shadow mt-2 text-sm">Save Template</button>
+              <button type="submit" disabled={isSaving} className="w-full bg-blue-600 text-white font-semibold py-2.5 rounded-xl shadow mt-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed">{isSaving ? 'Saving Template...' : 'Save Template'}</button>
             </form>
           </div>
         </div>

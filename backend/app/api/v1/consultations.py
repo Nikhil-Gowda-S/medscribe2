@@ -73,6 +73,33 @@ def get_consultation(
 
     return consultation
 
+@router.put("/{consultation_id}", response_model=ConsultationResponse)
+def update_consultation(
+    consultation_id: str,
+    cons_in: ConsultationUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_doctor),
+):
+    consultation = db.query(Consultation).filter(
+        Consultation.id == consultation_id,
+        Consultation.deleted_at.is_(None),
+    ).first()
+    if not consultation or consultation.doctor_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Consultation not found")
+    if consultation.status == "finalized":
+        raise HTTPException(status_code=400, detail="Cannot edit a finalized consultation")
+
+    if cons_in.transcript is not None:
+        if not cons_in.transcript.strip():
+            raise HTTPException(status_code=400, detail="Consultation transcript cannot be empty")
+        consultation.transcript = cons_in.transcript.strip()
+    if cons_in.status is not None:
+        consultation.status = cons_in.status
+    db.commit()
+    db.refresh(consultation)
+    log_audit_event(db, current_user.id, "update_consultation", "Consultation", consultation.id, "Updated consultation transcript")
+    return consultation
+
 @router.post("/{consultation_id}/audio", response_model=ConsultationResponse)
 async def upload_consultation_audio(
     consultation_id: str,

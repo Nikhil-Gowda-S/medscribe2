@@ -17,7 +17,7 @@ export const DoctorNewConsultationPage: React.FC = () => {
   // the generated document is attached to the same encounter rather than a new one.
   const [consultationId, setConsultationId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [activeOperation, setActiveOperation] = useState<'transcribing' | 'generating' | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
@@ -27,6 +27,7 @@ export const DoctorNewConsultationPage: React.FC = () => {
   }, []);
 
   const handleStartRecord = async () => {
+    if (activeOperation) return;
     if (!selectedPatientId) {
       alert('Please select a patient before recording');
       return;
@@ -49,7 +50,7 @@ export const DoctorNewConsultationPage: React.FC = () => {
         formData.append('file', audioBlob, 'recording.webm');
         
         try {
-          setLoading(true);
+          setActiveOperation('transcribing');
           const cRes = await client.post('/consultations', { patient_id: selectedPatientId, transcript: '' });
           const cons = cRes.data;
           
@@ -61,7 +62,7 @@ export const DoctorNewConsultationPage: React.FC = () => {
         } catch (err: any) {
           alert(err.response?.data?.detail || 'Error uploading recorded audio');
         } finally {
-          setLoading(false);
+          setActiveOperation(null);
           setIsRecording(false);
         }
       };
@@ -83,6 +84,7 @@ export const DoctorNewConsultationPage: React.FC = () => {
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (activeOperation) return;
     if (!e.target.files || e.target.files.length === 0) return;
     if (!selectedPatientId) {
       alert('Please select a patient before uploading audio');
@@ -94,7 +96,7 @@ export const DoctorNewConsultationPage: React.FC = () => {
     formData.append('file', file);
 
     try {
-      setLoading(true);
+      setActiveOperation('transcribing');
       // Create initial consultation first
       const cRes = await client.post('/consultations', { patient_id: selectedPatientId, transcript: '' });
       const cons = cRes.data;
@@ -107,11 +109,12 @@ export const DoctorNewConsultationPage: React.FC = () => {
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Error uploading audio file');
     } finally {
-      setLoading(false);
+      setActiveOperation(null);
     }
   };
 
   const handleGenerate = async () => {
+    if (activeOperation) return;
     if (!selectedPatientId) {
       alert('Please select a patient');
       return;
@@ -122,13 +125,17 @@ export const DoctorNewConsultationPage: React.FC = () => {
     }
 
     try {
-      setLoading(true);
+      setActiveOperation('generating');
       // Reuse the consultation created during audio transcription. For a pasted
       // transcript, create the consultation here.
       let targetConsultationId = consultationId;
       if (!targetConsultationId) {
         const cRes = await client.post('/consultations', { patient_id: selectedPatientId, transcript });
         targetConsultationId = cRes.data.id;
+      } else {
+        // Persist any corrections made in the transcript editor before asking AI
+        // to generate the report for this consultation.
+        await client.put(`/consultations/${targetConsultationId}`, { transcript });
       }
 
       await client.post('/documents/generate', {
@@ -141,7 +148,7 @@ export const DoctorNewConsultationPage: React.FC = () => {
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Error generating document draft');
     } finally {
-      setLoading(false);
+      setActiveOperation(null);
     }
   };
 
@@ -158,7 +165,12 @@ export const DoctorNewConsultationPage: React.FC = () => {
           <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">Select Patient</label>
           <select
             value={selectedPatientId}
-            onChange={(e) => setSelectedPatientId(e.target.value)}
+            disabled={Boolean(activeOperation) || isRecording}
+            onChange={(e) => {
+              setSelectedPatientId(e.target.value);
+              setTranscript('');
+              setConsultationId(null);
+            }}
             className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 text-sm"
           >
             <option value="">-- Choose Patient --</option>
@@ -205,7 +217,8 @@ export const DoctorNewConsultationPage: React.FC = () => {
             {!isRecording ? (
               <button
                 onClick={handleStartRecord}
-                className="flex items-center space-x-2 bg-rose-600 hover:bg-rose-700 px-6 py-3 rounded-xl font-semibold shadow-lg transition"
+                disabled={Boolean(activeOperation)}
+                className="flex items-center space-x-2 bg-rose-600 hover:bg-rose-700 px-6 py-3 rounded-xl font-semibold shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Mic className="w-5 h-5" />
                 <span>Start Live Recording</span>
@@ -220,13 +233,14 @@ export const DoctorNewConsultationPage: React.FC = () => {
               </button>
             )}
 
-            <label className="flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 px-5 py-3 rounded-xl font-semibold cursor-pointer border border-slate-700 transition">
+            <label className={`flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 px-5 py-3 rounded-xl font-semibold border border-slate-700 transition ${activeOperation || isRecording ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
               <Upload className="w-5 h-5 text-blue-400" />
               <span>Upload Audio File</span>
-              <input type="file" accept="audio/*" onChange={handleFileUpload} className="hidden" />
+              <input type="file" accept="audio/*" disabled={Boolean(activeOperation) || isRecording} onChange={handleFileUpload} className="hidden" />
             </label>
           </div>
-          {isRecording && <p className="text-xs text-rose-400 animate-pulse font-mono">● Ambient Listening Active...</p>}
+          {isRecording && <p className="text-xs text-rose-400 animate-pulse font-mono">● Recording in progress...</p>}
+          {activeOperation === 'transcribing' && <p className="text-xs text-blue-300 animate-pulse">Transcribing audio. Please keep this page open…</p>}
         </div>
 
         {/* Transcript Textarea */}
@@ -244,11 +258,11 @@ export const DoctorNewConsultationPage: React.FC = () => {
         {/* Generate Button */}
         <button
           onClick={handleGenerate}
-          disabled={loading || !selectedPatientId || !transcript}
+          disabled={Boolean(activeOperation) || !selectedPatientId || !transcript}
           className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3.5 px-6 rounded-xl shadow-lg transition flex items-center justify-center space-x-2 disabled:opacity-50"
         >
           <Sparkles className="w-5 h-5" />
-          <span>{loading ? 'Generating AI Clinical Note...' : 'Generate AI Clinical Draft'}</span>
+          <span>{activeOperation === 'transcribing' ? 'Transcribing Audio...' : activeOperation === 'generating' ? 'Generating AI Clinical Note...' : 'Generate AI Clinical Draft'}</span>
         </button>
       </div>
     </div>
