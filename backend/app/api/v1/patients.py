@@ -21,17 +21,6 @@ def list_patients(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Email is optional, but when supplied it is a useful safe guard against a
-    # double-click creating the same patient twice for this doctor.
-    if patient_in.email:
-        duplicate = db.query(Patient).join(DoctorPatient).filter(
-            DoctorPatient.doctor_id == current_user.id,
-            Patient.deleted_at.is_(None),
-            func.lower(Patient.email) == patient_in.email.lower(),
-        ).first()
-        if duplicate:
-            raise HTTPException(status_code=409, detail="A patient with this email is already assigned to you")
-
     if current_user.role == "ADMIN":
         return db.query(Patient).filter(Patient.deleted_at.is_(None)).all()
     elif current_user.role == "DOCTOR":
@@ -51,6 +40,17 @@ def create_patient(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_doctor)
 ):
+    # Email is optional, but when supplied it is a useful safeguard against a
+    # double-click creating the same patient twice for this doctor.
+    if patient_in.email:
+        duplicate = db.query(Patient).join(DoctorPatient).filter(
+            DoctorPatient.doctor_id == current_user.id,
+            Patient.deleted_at.is_(None),
+            func.lower(Patient.email) == patient_in.email.lower(),
+        ).first()
+        if duplicate:
+            raise HTTPException(status_code=409, detail="A patient with this email is already assigned to you")
+
     patient = Patient(
         first_name=patient_in.first_name,
         last_name=patient_in.last_name,
