@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '@/api/client';
 import { Patient, DocumentTemplate } from '@/types';
-import { Mic, Square, Upload, Sparkles, Loader2 } from 'lucide-react';
+import { Mic, Square, Upload, Sparkles, Loader2, RotateCcw, Volume2 } from 'lucide-react';
 
 export const DoctorNewConsultationPage: React.FC = () => {
   const navigate = useNavigate();
@@ -18,15 +18,26 @@ export const DoctorNewConsultationPage: React.FC = () => {
   const [consultationId, setConsultationId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
+  const [transcriptionWarning, setTranscriptionWarning] = useState('');
   const [activeOperation, setActiveOperation] = useState<'transcribing' | 'generating' | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<number | null>(null);
   const recordingSecondsRef = useRef(0);
+  const audioPreviewUrlRef = useRef<string | null>(null);
 
   useEffect(() => () => {
     if (recordingTimerRef.current !== null) window.clearInterval(recordingTimerRef.current);
+    if (audioPreviewUrlRef.current) URL.revokeObjectURL(audioPreviewUrlRef.current);
   }, []);
+
+  const showAudioPreview = (audio: Blob) => {
+    if (audioPreviewUrlRef.current) URL.revokeObjectURL(audioPreviewUrlRef.current);
+    const nextUrl = URL.createObjectURL(audio);
+    audioPreviewUrlRef.current = nextUrl;
+    setAudioPreviewUrl(nextUrl);
+  };
 
   useEffect(() => {
     client.get('/patients').then(res => setPatients(res.data));
@@ -40,8 +51,18 @@ export const DoctorNewConsultationPage: React.FC = () => {
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+        },
+      });
+      const preferredMimeType = 'audio/webm;codecs=opus';
+      const mediaRecorder = MediaRecorder.isTypeSupported(preferredMimeType)
+        ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+        : new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -53,6 +74,7 @@ export const DoctorNewConsultationPage: React.FC = () => {
 
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        showAudioPreview(audioBlob);
         mediaRecorder.stream.getTracks().forEach(track => track.stop());
         if (recordingTimerRef.current !== null) {
           window.clearInterval(recordingTimerRef.current);
@@ -77,6 +99,11 @@ export const DoctorNewConsultationPage: React.FC = () => {
           });
           setTranscript(uRes.data.transcript);
           setConsultationId(cons.id);
+          setTranscriptionWarning(
+            uRes.data.transcript.trim().split(/\s+/).filter(Boolean).length <= 2
+              ? 'The transcript is unusually short. Play the recording below to confirm the correct microphone was captured, then record again if needed.'
+              : ''
+          );
         } catch (err: any) {
           alert(err.response?.data?.detail || 'Error uploading recorded audio');
         } finally {
@@ -89,6 +116,7 @@ export const DoctorNewConsultationPage: React.FC = () => {
       mediaRecorder.start(1000);
       setRecordingSeconds(0);
       recordingSecondsRef.current = 0;
+      setTranscriptionWarning('');
       recordingTimerRef.current = window.setInterval(() => {
         recordingSecondsRef.current += 1;
         setRecordingSeconds(recordingSecondsRef.current);
@@ -120,6 +148,7 @@ export const DoctorNewConsultationPage: React.FC = () => {
       return;
     }
     const file = e.target.files[0];
+    showAudioPreview(file);
     const formData = new FormData();
     formData.append('file', file);
 
@@ -134,6 +163,11 @@ export const DoctorNewConsultationPage: React.FC = () => {
       });
       setTranscript(uRes.data.transcript);
       setConsultationId(cons.id);
+      setTranscriptionWarning(
+        uRes.data.transcript.trim().split(/\s+/).filter(Boolean).length <= 2
+          ? 'The transcript is unusually short. Play the audio below to verify the source before generating a report.'
+          : ''
+      );
     } catch (err: any) {
       alert(err.response?.data?.detail || 'Error uploading audio file');
     } finally {
@@ -270,6 +304,28 @@ export const DoctorNewConsultationPage: React.FC = () => {
           {isRecording && <p className="text-xs text-rose-400 animate-pulse font-mono">● Recording {recordingSeconds}s — speak normally, then press Stop when finished.</p>}
           {activeOperation === 'transcribing' && <p className="text-xs text-blue-300 flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" />Transcribing audio. This can take up to a minute; please keep this page open.</p>}
         </div>
+
+        {audioPreviewUrl && (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-slate-800 flex items-center gap-2"><Volume2 className="w-4 h-4 text-blue-600" />Recording check</p>
+              <button
+                type="button"
+                disabled={Boolean(activeOperation) || isRecording}
+                onClick={handleStartRecord}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-700 disabled:opacity-50"
+              >
+                <RotateCcw className="w-4 h-4" /> Record again
+              </button>
+            </div>
+            <audio controls src={audioPreviewUrl} className="w-full" />
+            <p className="text-xs text-slate-500">Play this before generating the report. If it does not contain your voice clearly, select the correct input microphone in your browser or Windows sound settings and record again.</p>
+          </div>
+        )}
+
+        {transcriptionWarning && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{transcriptionWarning}</div>
+        )}
 
         {/* Transcript Textarea */}
         <div>

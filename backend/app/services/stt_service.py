@@ -16,7 +16,14 @@ def transcribe_audio_file(file_bytes: bytes, filename: str) -> str:
         }
         extension = f".{filename.lower().rsplit('.', 1)[-1]}" if "." in filename else ""
         files = {"file": (filename, file_bytes, mime_types.get(extension, "application/octet-stream"))}
-        data = {"model": "whisper-large-v3", "response_format": "text"}
+        # The application records English clinical conversations. Providing the
+        # language avoids unreliable auto-detection on short recordings.
+        data = {
+            "model": "whisper-large-v3",
+            "response_format": "text",
+            "language": "en",
+            "temperature": "0",
+        }
         with httpx.Client(timeout=60.0) as client:
             res = client.post("https://api.groq.com/openai/v1/audio/transcriptions", headers=headers, files=files, data=data)
             if res.status_code == 200:
